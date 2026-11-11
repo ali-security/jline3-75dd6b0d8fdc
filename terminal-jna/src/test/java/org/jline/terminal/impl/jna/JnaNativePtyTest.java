@@ -25,8 +25,10 @@ public class JnaNativePtyTest {
     public void testOpen() throws IOException {
         // https://github.com/jline/jline3/issues/688
         // currently disabled on Mac M1 silicon
-        assumeFalse(Platform.isMac() && Platform.is64Bit() && Platform.isARM());
-        assumeFalse(Platform.isWindows());
+        assumeFalse(
+                Platform.isMac() && Platform.is64Bit() && Platform.isARM(),
+                "JNA native pty is disabled on macOS arm64 (Apple Silicon), see jline/jline3#688");
+        assumeFalse(Platform.isWindows(), "JNA native pty (openpty) is not available on Windows");
         JnaNativePty pty = JnaNativePty.open(null, null, null);
         assertNotNull(pty);
         Size sz = pty.getSize();

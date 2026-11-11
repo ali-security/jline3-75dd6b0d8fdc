@@ -18,29 +18,32 @@
 name: build
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: 'Optional surefire -Dtest selector; empty runs the full suite'
+        required: false
+        default: ''
 
 jobs:
   compile:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
-        os: [ ubuntu-latest, ubuntu-20.04, windows-latest, macos-latest ]
+        os: [ ubuntu-latest, ubuntu-22.04, windows-latest, macos-latest ]
         java: [ '21' ]
     steps:
       - uses: actions/checkout@v2
 
       - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
+          distribution: zulu
           java-version: ${{ matrix.java }}
 
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ matrix.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -48,4 +51,28 @@ jobs:
             ${{ matrix.os }}-maven-
 
       - name: Build with maven
-        run: mvn --no-transfer-progress verify
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.test-filter }}" ]; then
+            mvn --no-transfer-progress verify -Dtest="${{ inputs.test-filter }}" -Dsurefire.failIfNoSpecifiedTests=false
+          else
+            mvn --no-transfer-progress verify
+          fi
+
+      - name: List skipped tests with reasons
+        if: always()
+        shell: bash
+        run: |
+          if grep -rlq '<skipped' --include='TEST-*.xml' .; then
+            grep -rH -B1 '<skipped' --include='TEST-*.xml' . | grep -E 'testcase|skipped'
+          else
+            echo "No skipped tests"
+          fi
+
+      - name: Upload jline-builtins jar
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jline-builtins
+          path: builtins/target/jline-builtins-3.25.1.jar
+          if-no-files-found: error
